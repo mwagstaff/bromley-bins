@@ -47,44 +47,41 @@ Config (env): `PORT` (3040), `HOST`, `BINS_COUNCIL` (bromley),
 `BINS_UPSTREAM_TIMEOUT_MS` (10000), `BINS_ADDRESS_RATE_LIMIT` (20/min/IP),
 `BINS_COLLECTION_RATE_LIMIT` (60/min/IP), `BINS_TRUST_PROXY` (loopback).
 
-## Deploying the API (not done yet — needs server-tooling changes)
+## Deploying the API
 
-Runs **alongside** the old 1.0.3 backend (port 3013, `/bromley-bins`), which
-must keep running for users who haven't updated. The new route must not start
-with `/bromley-bins`, because Caddy's existing `handle_path /bromley-bins*`
-would swallow it. The app is built against:
+The API takes over the `bromley-bins` deploy entry and the existing
+`/bromley-bins` route. The old 1.0.3 backend no longer exists on `sky`, and that
+route was forwarding to port 3013, which is now the top-scores scraper. The app
+is built against:
 
 ```
-https://api.skynolimit.dev/bin-collections
+https://api.skynolimit.dev/bromley-bins
 ```
 
-1. `server-tooling/deploy/config/node_projects.json`:
+`server-tooling` changes:
+
+1. `deploy/config/node_projects.json`, replace the `bromley-bins` entry with:
    ```json
    {
-       "name": "bin-collections-api",
+       "name": "bromley-bins",
        "aliases": ["bromley-bins-api"],
        "path": "/Users/mwagstaff/dev/bromley-bins/api",
+       "remote_dir": "~/dev/bromley-bins-api",
+       "sync_env_local": false,
        "start_command": "npm start",
        "startup_port": 3040,
        "metrics_port": 3040,
        "healthcheck_path": "/healthcheck",
-       "service_label": "com.bin-collections.api",
-       "service_description": "Bromley Bins 2 API",
+       "service_label": "com.bromley-bins.api",
+       "service_description": "Bromley Bins API Service",
        "static_env": { "PORT": "3040", "TZ": "Europe/London" }
    }
    ```
-2. `server-tooling/deploy/node_project.zsh`: add `bin-collections-api sky` to `PROJECT_DEFAULT_HOSTS`.
-3. `server-tooling/caddy/setup-caddy-cloudflare-tunnel.zsh`: add
-   ```
-   handle_path /bin-collections* {
-     reverse_proxy http://127.0.0.1:3040 {
-       header_up Host 127.0.0.1
-       header_up X-Forwarded-Host {host}
-       header_up X-Forwarded-Proto https
-     }
-   }
-   ```
-4. Verify: `curl https://api.skynolimit.dev/bin-collections/api/bins/3642936/collections`
+   (`bromley-bins sky` is already in `PROJECT_DEFAULT_HOSTS`.)
+2. `caddy/setup-caddy-cloudflare-tunnel.zsh`: in `handle_path /bromley-bins*`, change `127.0.0.1:3013` to `127.0.0.1:3040`, then re-run the Caddy setup.
+3. `deploy/tailscale-funnel-apply.sh` and `tailscale/resources/tailscale-funnel-apply.sh`: `apply_route /bromley-bins http://127.0.0.1:3040`.
+4. Deploy with `./deploy/node_project.zsh bromley-bins`, then verify with
+   `curl https://api.skynolimit.dev/bromley-bins/api/bins/3642936/collections`.
 
 ## iOS
 

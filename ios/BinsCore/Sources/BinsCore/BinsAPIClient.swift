@@ -42,7 +42,7 @@ public protocol BinsAPI: Sendable {
 }
 
 public struct BinsAPIClient: BinsAPI {
-    public static let productionBaseURL = URL(string: "https://api.skynolimit.dev/bin-collections")!
+    public static let productionBaseURL = URL(string: "https://api.skynolimit.dev/bromley-bins")!
 
     private let baseURL: URL
     private let session: URLSession
