@@ -1,0 +1,23 @@
+{
+  "name": "bromley-bins-api",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bin collection lookup API for Bromley Bins (WasteWorks adapter)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test test/*.test.js",
+    "test:live": "LIVE_TESTS=1 node --test test/live.test.js",
+    "lint": "node --check index.js && for f in lib/*.js lib/**/*.js test/*.js; do node --check \"$f\" || exit 1; done"
+  },
+  "engines": {
+    "node": ">=20.3"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "express": "^5.2.1",
+    "ical.js": "^2.2.1",
+    "prom-client": "^15.1.3"
+  }
+}
