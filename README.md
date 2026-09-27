@@ -113,9 +113,12 @@ the evening before until the day ends. Either can be swiped away. Both are
 scheduled on-device with iOS 26's scheduled-start `Activity.request`, with a
 silent alert so the notification is the only sound.
 
-Scheduling needs the app to run, so it's re-done on every launch or foreground
-and on background refresh. If the app hasn't run since the previous collection,
-the notification still arrives but the Live Activity may not. Making that
+ActivityKit only allows requesting (starting or scheduling) a Live Activity
+while the app is in the foreground. Once scheduled, the system starts it at the
+given time even if the app is backgrounded. So activities are scheduled
+whenever the app is opened; background refresh can update or end them but
+not create them. If the app isn't opened between one collection and the next,
+the notification still arrives but the Live Activity won't. Making that
 guaranteed would need server-side push-to-start.
 
 ### Debug-only reminder testing

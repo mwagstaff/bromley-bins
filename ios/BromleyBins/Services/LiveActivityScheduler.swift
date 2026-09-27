@@ -2,14 +2,18 @@ import ActivityKit
 import BinsCore
 import Foundation
 import os
+import UIKit
 
 /// Keeps bin-day Live Activities in line with `BinDayActivityPlanner`: starts or
 /// schedules what's missing, updates what changed, ends what's no longer wanted.
 ///
-/// Scheduling needs the app to be running, so this runs on every state change,
-/// on foregrounding and on background refresh; anything iOS refuses (e.g. from
-/// the background) is retried next time. The evening reminder notification is
-/// scheduled independently, so it still arrives if an activity couldn't be.
+/// ActivityKit only lets an app request (start or schedule) a Live Activity
+/// while it's in the foreground; once scheduled, the system starts it at the
+/// given time even if the app is in the background. Updating and ending work
+/// from the background too. So this runs on every state change, foregrounding
+/// and background refresh, but only requests new activities when active. The
+/// evening reminder notification is scheduled independently, so it still
+/// arrives if an activity couldn't be.
 @MainActor
 final class LiveActivityScheduler {
     static let shared = LiveActivityScheduler()
@@ -49,7 +53,9 @@ final class LiveActivityScheduler {
             .filter { $0.activityState == .active || $0.activityState == .pending }
             .map(\.attributes.key))
 
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled,
+              UIApplication.shared.applicationState == .active
+        else {
             saveRequestedKeys(requested)
             return
         }
