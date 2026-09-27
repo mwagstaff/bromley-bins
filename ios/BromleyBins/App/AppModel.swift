@@ -20,6 +20,7 @@ final class AppModel {
     let api: any BinsAPI
     private let store: BinsStore
     private let reminders: ReminderScheduler
+    private let liveActivities = LiveActivityScheduler.shared
     private let logger = Logger(subsystem: "dev.skynolimit.bromleybins", category: "model")
 
     /// Refreshing more often than this on foregrounding adds nothing: the API
@@ -50,6 +51,9 @@ final class AppModel {
 
     func refreshIfDue() async {
         today = CollectionDay(containing: .now)
+        // Live Activities can only be scheduled while the app runs, so catch
+        // up on every foregrounding, not just when a refresh is due.
+        await liveActivities.reconcile(with: state)
         let lastRefresh = state.lastSuccessfulRefresh ?? .distantPast
         guard Date.now.timeIntervalSince(lastRefresh) > Self.foregroundRefreshInterval else { return }
         await refresh()
@@ -71,6 +75,7 @@ final class AppModel {
             logger.notice("Refresh failed: \(String(describing: error), privacy: .public)")
             refreshError = error
         }
+        await liveActivities.reconcile(with: state)
     }
 
     func dayDidChange() {
@@ -124,6 +129,12 @@ final class AppModel {
         await update(next)
     }
 
+    func setShowsLiveActivity(_ shows: Bool) async {
+        var next = state
+        next.reminders.showsLiveActivity = shows
+        await update(next)
+    }
+
     func reminderAuthorizationDenied() async -> Bool {
         await reminders.isDenied()
     }
@@ -140,6 +151,7 @@ final class AppModel {
             logger.error("Save failed: \(error.localizedDescription, privacy: .public)")
         }
         await reminders.reschedule(for: next)
+        await liveActivities.reconcile(with: next)
         WidgetCenter.shared.reloadAllTimelines()
         BackgroundRefresh.schedule()
     }

@@ -6,6 +6,7 @@ import WidgetKit
 struct BromleyBinsWidgetBundle: WidgetBundle {
     var body: some Widget {
         NextCollectionWidget()
+        BinDayLiveActivity()
     }
 }
 

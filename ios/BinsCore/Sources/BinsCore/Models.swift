@@ -91,11 +91,26 @@ public struct ReminderSettings: Codable, Hashable, Sendable {
     /// London wall-clock time on the evening before a collection.
     public var hour: Int
     public var minute: Int
+    /// Also show a Lock Screen Live Activity from the reminder until bin day ends.
+    public var showsLiveActivity: Bool
 
-    public init(isEnabled: Bool = false, hour: Int = 19, minute: Int = 0) {
+    public init(isEnabled: Bool = false, hour: Int = 19, minute: Int = 0, showsLiveActivity: Bool = true) {
         self.isEnabled = isEnabled
         self.hour = hour
         self.minute = minute
+        self.showsLiveActivity = showsLiveActivity
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled, hour, minute, showsLiveActivity
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        hour = try container.decode(Int.self, forKey: .hour)
+        minute = try container.decode(Int.self, forKey: .minute)
+        showsLiveActivity = try container.decodeIfPresent(Bool.self, forKey: .showsLiveActivity) ?? true
     }
 }
 

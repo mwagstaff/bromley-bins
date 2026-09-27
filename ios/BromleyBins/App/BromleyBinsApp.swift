@@ -6,6 +6,10 @@ struct BromleyBinsApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        NotificationPresenter.shared.install()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -14,6 +18,11 @@ struct BromleyBinsApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                     model.dayDidChange()
                 }
+                #if DEBUG
+                .onOpenURL { url in
+                    Task { await DebugReminderTester.handle(url) }
+                }
+                #endif
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {

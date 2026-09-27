@@ -98,6 +98,42 @@ cd ios && xcodebuild -project BromleyBins.xcodeproj -scheme BromleyBins -destina
 Debug builds can target a local API: set the `BINS_API_BASE_URL` environment
 variable in the scheme (e.g. `http://127.0.0.1:3040`).
 
+### Reminders and Live Activities
+
+With reminders on, the app schedules an evening-before local notification for
+every upcoming collection (up to 30), plus, if "Show on Lock Screen" is on, a
+Lock Screen / Dynamic Island Live Activity for the **next** collection:
+
+- **"Bins out tonight"** starts at the reminder time the evening before.
+- **"Bin day today"** takes over at 07:00 on collection day.
+
+Two activities are needed because iOS keeps a Live Activity active for only
+about 8 hours (then up to ~4 more on the Lock Screen), so one can't last from
+the evening before until the day ends. Either can be swiped away. Both are
+scheduled on-device with iOS 26's scheduled-start `Activity.request`, with a
+silent alert so the notification is the only sound.
+
+Scheduling needs the app to run, so it's re-done on every launch or foreground
+and on background refresh. If the app hasn't run since the previous collection,
+the notification still arrives but the Live Activity may not. Making that
+guaranteed would need server-side push-to-start.
+
+### Debug-only reminder testing
+
+Debug builds add **Settings → Debug → Test reminders**: pick any bins, choose
+evening or collection-day style, pick a delay, and send a notification, a
+Live Activity or both. It also lists the real pending reminders and
+activities. The same actions are available by URL, for Safari, Shortcuts or
+`xcrun simctl openurl booted …`:
+
+```
+bromleybins://debug/reminder?bins=food,recycling&delay=10&phase=evening&send=both
+bromleybins://debug/end
+```
+
+`bins`: food, recycling, paper, refuse, garden, other. `phase`: evening or day.
+`send`: both, notification or activity. Release builds ignore these URLs.
+
 ### Before submitting 2.0
 
 - **Team**: set to `SJ8X4DLAN9` (as TubeTrack). Confirm that's the team that owns the live app.

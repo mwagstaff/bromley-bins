@@ -6,6 +6,17 @@
 	<array>
 		<string>dev.skynolimit.bromleybins.refresh</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.skynolimit.bromleybins</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bromleybins</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

@@ -31,11 +31,20 @@ public enum ReminderPlanner {
                     id: "\(identifierPrefix)\(property.propertyId).\(group.day.isoString).\(types)",
                     fireDate: fireDate,
                     collectionDay: group.day,
-                    title: "Bins out tonight",
-                    body: "\(ScheduleFormatting.list(labels)) \(labels.count == 1 ? "is" : "are") being collected tomorrow."
+                    title: ReminderMessage.title,
+                    body: ReminderMessage.body(labels: labels)
                 )
             }
             .prefix(maximumReminders)
             .map { $0 }
+    }
+}
+
+/// Reminder wording, shared by real reminders and the debug test tools.
+public enum ReminderMessage {
+    public static let title = "Bins out tonight"
+
+    public static func body(labels: [String]) -> String {
+        "\(ScheduleFormatting.list(labels)) \(labels.count == 1 ? "is" : "are") being collected tomorrow."
     }
 }

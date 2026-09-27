@@ -14,6 +14,11 @@ struct SettingsView: View {
                 binsSection
                 remindersSection
                 aboutSection
+                #if DEBUG
+                Section("Debug") {
+                    NavigationLink("Test reminders") { DebugReminderView() }
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .task { notificationsDenied = await model.reminderAuthorizationDenied() }
@@ -87,6 +92,10 @@ struct SettingsView: View {
             if model.state.reminders.isEnabled {
                 DatePicker("Reminder time", selection: reminderTime, displayedComponents: .hourAndMinute)
                     .environment(\.timeZone, CollectionDay.calendar.timeZone)
+                Toggle("Show on Lock Screen", isOn: Binding(
+                    get: { model.state.reminders.showsLiveActivity },
+                    set: { shows in Task { await model.setShowsLiveActivity(shows) } }
+                ))
             }
         } header: {
             Text("Reminders")
@@ -102,7 +111,7 @@ struct SettingsView: View {
                     .font(.footnote.weight(.semibold))
                 }
             } else {
-                Text("You'll get one notification the evening before each collection day.")
+                Text("You'll get a notification the evening before each collection day. \"Show on Lock Screen\" also keeps your bins on the Lock Screen until bin day is over; swipe it away to dismiss it.")
             }
         }
     }

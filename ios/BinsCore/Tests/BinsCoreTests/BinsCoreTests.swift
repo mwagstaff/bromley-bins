@@ -209,3 +209,57 @@ private let schedule = [
         #expect(abs(response.lastUpdated.timeIntervalSince1970 - 1_790_461_800.123) < 0.01)
     }
 }
+
+@Suite struct BinDayActivityPlannerTests {
+    private func state(liveActivity: Bool = true, enabled: Bool = true) -> BinsState {
+        BinsState(
+            property: property,
+            collections: schedule,
+            reminders: ReminderSettings(isEnabled: enabled, hour: 19, minute: 0, showsLiveActivity: liveActivity)
+        )
+    }
+
+    @Test func schedulesEveningAndMorningActivitiesForTheNextCollection() {
+        let plan = BinDayActivityPlanner.plan(for: state(), now: london("2026-09-30", 12))
+        #expect(plan.map(\.phase) == [.eveningBefore, .collectionDay])
+        #expect(plan[0].start == london("2026-10-01", 19))
+        #expect(plan[1].start == london("2026-10-02", 7))
+        #expect(plan.allSatisfy { $0.staleDate == day("2026-10-03").startDate })
+        #expect(plan[0].items.map(\.type) == [.food, .recycling])
+        #expect(plan[0].key == "3642936.2026-10-02.eveningBefore")
+    }
+
+    @Test func startsImmediatelyInsideTheWindow() {
+        let evening = BinDayActivityPlanner.plan(for: state(), now: london("2026-10-01", 21))
+        #expect(evening.map(\.phase) == [.eveningBefore, .collectionDay])
+        #expect(evening[0].start == nil)
+        #expect(evening[1].start == london("2026-10-02", 7))
+
+        let morning = BinDayActivityPlanner.plan(for: state(), now: london("2026-10-02", 9))
+        #expect(morning.map(\.phase) == [.collectionDay])
+        #expect(morning[0].start == nil)
+    }
+
+    @Test func movesOnOnceBinDayIsOver() {
+        let plan = BinDayActivityPlanner.plan(for: state(), now: london("2026-10-03", 0, 5))
+        #expect(plan.first?.day == day("2026-10-09"))
+    }
+
+    @Test func respectsHiddenTypes() {
+        var state = state()
+        state.hiddenTypes = ["Food Waste collection", "Mixed Recycling (Cans, Plastics & Glass) collection"]
+        #expect(BinDayActivityPlanner.plan(for: state, now: london("2026-09-30", 12)).first?.day == day("2026-10-09"))
+    }
+
+    @Test func nothingWhenRemindersOrLiveActivitiesAreOff() {
+        #expect(BinDayActivityPlanner.plan(for: state(enabled: false), now: london("2026-09-30", 12)).isEmpty)
+        #expect(BinDayActivityPlanner.plan(for: state(liveActivity: false), now: london("2026-09-30", 12)).isEmpty)
+    }
+
+    @Test func oldSavedSettingsDefaultToShowingLiveActivities() throws {
+        let json = #"{"isEnabled":true,"hour":19,"minute":30}"#
+        let settings = try JSONDecoder().decode(ReminderSettings.self, from: Data(json.utf8))
+        #expect(settings.showsLiveActivity)
+        #expect(settings.minute == 30)
+    }
+}
