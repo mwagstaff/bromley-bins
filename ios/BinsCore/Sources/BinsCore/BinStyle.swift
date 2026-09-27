@@ -54,7 +54,9 @@ public extension Color {
     }()
 }
 
-/// A tinted circular badge with the collection's symbol.
+/// The container a collection goes out in, drawn to match the pictures on
+/// Bromley's bin collection pages so people recognise their bins at a glance.
+/// Unknown collection types fall back to a tinted symbol badge.
 public struct BinBadge: View {
     let type: BinCollectionType
     let size: CGFloat
@@ -65,11 +67,18 @@ public struct BinBadge: View {
     }
 
     public var body: some View {
-        Image(systemName: type.symbolName)
-            .font(.system(size: size * 0.46, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(type.tint.gradient, in: Circle())
-            .accessibilityHidden(true)
+        Group {
+            if type == .other {
+                Image(systemName: type.symbolName)
+                    .font(.system(size: size * 0.46, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: size, height: size)
+                    .background(type.tint.gradient, in: Circle())
+            } else {
+                BinIllustration(type: type)
+                    .frame(width: size, height: size)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }

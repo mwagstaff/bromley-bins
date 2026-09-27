@@ -98,6 +98,15 @@ cd ios && xcodebuild -project BromleyBins.xcodeproj -scheme BromleyBins -destina
 Debug builds can target a local API: set the `BINS_API_BASE_URL` environment
 variable in the scheme (e.g. `http://127.0.0.1:3040`).
 
+### Bin icons
+
+`BinsCore/BinIllustration.swift` holds original vector drawings of the
+containers Bromley's bin pages show: green food caddy, green mixed-recycling
+box, black paper box, black refuse sack, and black garden bin with a brown lid.
+They're deliberately not the council/FixMyStreet PNGs, which are AGPL-3.0.
+The monochrome Lock Screen widgets keep SF Symbols, because iOS renders those
+as silhouettes.
+
 ### Reminders and Live Activities
 
 With reminders on, the app schedules an evening-before local notification for

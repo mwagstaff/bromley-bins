@@ -107,7 +107,7 @@ private struct SmallView: View {
             Spacer(minLength: 0)
             ForEach(group.collections.prefix(3)) { collection in
                 HStack(spacing: 6) {
-                    BinBadge(collection.normalizedType, size: 20)
+                    BinBadge(collection.normalizedType, size: 24)
                     Text(collection.label)
                         .font(.caption)
                         .lineLimit(1)
@@ -145,7 +145,7 @@ private struct MediumView: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(group.collections.prefix(4)) { collection in
                     HStack(spacing: 8) {
-                        BinBadge(collection.normalizedType, size: 24)
+                        BinBadge(collection.normalizedType, size: 28)
                         Text(collection.label)
                             .font(.caption)
                             .lineLimit(2)

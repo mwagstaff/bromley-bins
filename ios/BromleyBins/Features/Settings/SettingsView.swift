@@ -65,7 +65,7 @@ struct SettingsView: View {
                         set: { visible in Task { await model.setType(collection.type, visible: visible) } }
                     )) {
                         HStack(spacing: 12) {
-                            BinBadge(collection.normalizedType, size: 28)
+                            BinBadge(collection.normalizedType, size: 34)
                             Text(collection.label)
                         }
                     }

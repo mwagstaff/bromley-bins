@@ -28,7 +28,7 @@ struct BinDayLiveActivity: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    BinItemsList(items: items, badgeSize: 22)
+                    BinItemsList(items: items, badgeSize: 28)
                         .padding(.top, 4)
                 }
             } compactLeading: {
@@ -38,8 +38,7 @@ struct BinDayLiveActivity: Widget {
             } compactTrailing: {
                 HStack(spacing: 2) {
                     ForEach(items.prefix(3), id: \.self) { item in
-                        Image(systemName: item.type.symbolName)
-                            .foregroundStyle(item.type.tint)
+                        BinBadge(item.type, size: 20)
                     }
                 }
                 .accessibilityElement(children: .ignore)
@@ -75,7 +74,7 @@ private struct BinDayLockScreenView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                BinItemsList(items: items, badgeSize: 26)
+                BinItemsList(items: items, badgeSize: 32)
             }
         }
         .padding(16)
@@ -87,14 +86,32 @@ private struct BinItemsList: View {
     let items: [BinDayItem]
     let badgeSize: CGFloat
 
+    /// Live Activities have a fixed maximum height, so beyond three bins
+    /// switch from one row per bin to a row of icons and a combined label.
+    private static let maximumListedItems = 3
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(items, id: \.self) { item in
-                HStack(spacing: 10) {
-                    BinBadge(item.type, size: badgeSize)
-                    Text(item.label)
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
+        Group {
+            if items.count <= Self.maximumListedItems {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(items, id: \.self) { item in
+                        HStack(spacing: 10) {
+                            BinBadge(item.type, size: badgeSize)
+                            Text(item.label)
+                                .font(.subheadline.weight(.medium))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        ForEach(items, id: \.self) { BinBadge($0.type, size: badgeSize) }
+                    }
+                    Text(ScheduleFormatting.list(items.map(\.label)))
+                        .font(.caption.weight(.medium))
+                        .lineLimit(2)
                         .minimumScaleFactor(0.8)
                 }
             }

@@ -60,7 +60,7 @@ struct DebugReminderView: View {
                         set: { if $0 { selected.insert(item) } else { selected.remove(item) } }
                     )) {
                         HStack(spacing: 10) {
-                            BinBadge(item.type, size: 26)
+                            BinBadge(item.type, size: 32)
                             Text(item.label)
                         }
                     }

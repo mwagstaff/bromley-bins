@@ -80,7 +80,7 @@ private struct NextCollectionCard: View {
             VStack(spacing: 12) {
                 ForEach(group.collections) { collection in
                     HStack(spacing: 14) {
-                        BinBadge(collection.normalizedType, size: 44)
+                        BinBadge(collection.normalizedType, size: 64)
                         Text(collection.label)
                             .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -137,7 +137,7 @@ private struct UpcomingRow: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(group.collections) { collection in
                     HStack(spacing: 10) {
-                        BinBadge(collection.normalizedType, size: 26)
+                        BinBadge(collection.normalizedType, size: 34)
                         Text(collection.label)
                             .font(.subheadline)
                     }
