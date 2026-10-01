@@ -2,7 +2,8 @@ import BinsCore
 import Foundation
 import UserNotifications
 
-/// Turns `ReminderPlanner`'s plan into pending local notifications. Every
+/// Fallback for when the server isn't sending reminders (e.g. not yet
+/// registered): turns `ReminderPlanner`'s plan into local notifications. Every
 /// reschedule removes all of our pending reminders and adds the fresh plan, so
 /// a changed schedule can never leave a reminder for a cancelled collection.
 struct ReminderScheduler: Sendable {
@@ -19,11 +20,14 @@ struct ReminderScheduler: Sendable {
         await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .denied
     }
 
-    func reschedule(for state: BinsState) async {
+    /// `serverSends`: the server has confirmed it will push these reminders,
+    /// so local ones are cleared to avoid duplicates.
+    func reschedule(for state: BinsState, serverSends: Bool) async {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
         let ours = pending.map(\.identifier).filter { $0.hasPrefix(ReminderPlanner.identifierPrefix) }
         center.removePendingNotificationRequests(withIdentifiers: ours)
+        guard !serverSends else { return }
 
         for reminder in ReminderPlanner.plan(for: state, now: .now) {
             let content = UNMutableNotificationContent()

@@ -15,6 +15,7 @@ let package = Package(
         .testTarget(
             name: "BinsCoreTests",
             dependencies: ["BinsCore"],
+            resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

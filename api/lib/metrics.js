@@ -45,6 +45,17 @@ export function createMetrics({ collectDefaults = true } = {}) {
             labelNames: ['cache'],
             registers: [registry]
         }),
+        pushes: new Counter({
+            name: 'bins_pushes_total',
+            help: 'Reminder pushes by kind (notification, activity) and outcome',
+            labelNames: ['kind', 'outcome'],
+            registers: [registry]
+        }),
+        registeredDevices: new Gauge({
+            name: 'bins_registered_devices',
+            help: 'Devices registered for reminder pushes',
+            registers: [registry]
+        }),
         rateLimited: new Counter({
             name: 'bins_rate_limited_total',
             help: 'Requests rejected by the rate limiter',

@@ -190,8 +190,6 @@ private let schedule = [
 @Suite struct APIClientTests {
     @Test func mapsServerErrorCodes() {
         let body = { (code: String) in Data(#"{"error":{"code":"\#(code)","message":"x"}}"#.utf8) }
-        #expect(BinsAPIClient.error(status: 400, body: body("INVALID_POSTCODE")) == .invalidPostcode)
-        #expect(BinsAPIClient.error(status: 404, body: body("NO_ADDRESSES_FOUND")) == .noAddressesFound)
         #expect(BinsAPIClient.error(status: 404, body: body("PROPERTY_NOT_FOUND")) == .propertyNotFound)
         #expect(BinsAPIClient.error(status: 504, body: body("UPSTREAM_TIMEOUT")) == .councilUnavailable)
         #expect(BinsAPIClient.error(status: 429, body: Data()) == .rateLimited)
@@ -261,5 +259,99 @@ private let schedule = [
         let settings = try JSONDecoder().decode(ReminderSettings.self, from: Data(json.utf8))
         #expect(settings.showsLiveActivity)
         #expect(settings.minute == 30)
+    }
+}
+
+private func fixture(_ name: String) throws -> String {
+    let url = try #require(Bundle.module.url(forResource: name, withExtension: "html", subdirectory: "Fixtures"))
+    return try String(contentsOf: url, encoding: .utf8)
+}
+
+@Suite struct AddressLookupTests {
+    @Test func normalisesPostcodes() {
+        for input in ["BR31AA", "br31aa", "BR3 1AA", "BR3   1AA", " br3 1aa ", "Br3\t1Aa"] {
+            #expect(Postcode.normalize(input) == "BR3 1AA", "\(input)")
+        }
+        #expect(Postcode.normalize("se96ab") == "SE9 6AB")
+        #expect(Postcode.normalize("SW1A1AA") == "SW1A 1AA")
+        for input in ["", "BR3", "12345", "BR3 1AAA", "BR3-1AA", "<script>", "BR3 1A"] {
+            #expect(Postcode.normalize(input) == nil, "\(input)")
+        }
+    }
+
+    @Test func parsesTheResultsPage() throws {
+        let addresses = try WasteWorksAddressParser.parse(fixture("wasteworks-address-results"))
+        #expect(addresses.count == 6)
+        #expect(addresses.allSatisfy { $0.propertyId.allSatisfy(\.isNumber) })
+        #expect(addresses.first { $0.propertyId == "6150011" }?.address == "Ground Floor Shop, 1 Sample Road, Bromley, BR1 1AA")
+        // Natural order, with the blank and "can't find my address" options ignored.
+        #expect(addresses.prefix(5).map { $0.address.split(separator: ",")[0] } == ["Flat 1", "Flat 2", "Flat 3", "Flat 4", "Flat 10"])
+    }
+
+    @Test func noResultsPageIsEmptyNotAnError() throws {
+        #expect(try WasteWorksAddressParser.parse(fixture("wasteworks-address-none")).isEmpty)
+    }
+
+    @Test func markupChangesAreErrors() throws {
+        let html = try fixture("wasteworks-address-results")
+        #expect(throws: WasteWorksAddressParser.ParseError.addressSelectMissing) {
+            try WasteWorksAddressParser.parse(html.replacingOccurrences(of: "id=\"address\"", with: "id=\"property\""))
+        }
+        #expect(throws: WasteWorksAddressParser.ParseError.addressSelectMissing) {
+            try WasteWorksAddressParser.parse("<html>Service unavailable</html>")
+        }
+        #expect(throws: WasteWorksAddressParser.ParseError.noNumericOptions) {
+            try WasteWorksAddressParser.parse(html.replacing(/value="([0-9]+)"/) { "value=\"uprn-\($0.output.1)\"" })
+        }
+    }
+
+    @Test func decodesEntitiesAndDeduplicates() throws {
+        let html = """
+        <select class="x" id="address"><option value="">Pick</option>
+        <option value="42">1  St Mary&#39;s   Road &amp; Annex</option>
+        <option value="42">duplicate</option>
+        <option value="43">Flat&nbsp;2, O&#x2019;Neill House</option></select>
+        """
+        #expect(try WasteWorksAddressParser.parse(html) == [
+            BinAddress(propertyId: "42", address: "1 St Mary's Road & Annex"),
+            BinAddress(propertyId: "43", address: "Flat 2, O\u{2019}Neill House"),
+        ])
+    }
+
+    @Test func invalidPostcodeNeverReachesTheNetwork() async {
+        await #expect(throws: BinsAPIError.invalidPostcode) {
+            try await CouncilAddressLookup(baseURL: URL(string: "https://invalid.example")!).addresses(postcode: "nope")
+        }
+    }
+}
+
+@Suite struct DeviceRegistrationTests {
+    @Test func encodesWithoutAnyAddressData() throws {
+        let registration = DeviceRegistration(
+            apnsToken: "aa",
+            liveActivityToken: nil,
+            environment: .sandbox,
+            propertyId: "3642936",
+            reminders: ReminderSettings(isEnabled: true, hour: 19, minute: 30, showsLiveActivity: false),
+            hiddenTypes: ["Food Waste collection", "A collection"]
+        )
+        let json = try #require(String(data: JSONEncoder().encode(registration), encoding: .utf8))
+        #expect(json.contains(#""propertyId":"3642936""#))
+        #expect(json.contains(#""hiddenTypes":["A collection","Food Waste collection"]"#))
+        #expect(json.contains(#""environment":"sandbox""#))
+        #expect(!json.localizedCaseInsensitiveContains("postcode"))
+        #expect(!json.localizedCaseInsensitiveContains("address"))
+    }
+
+    @Test func liveActivityAttributesDecodeFromServerJSON() throws {
+        #if os(iOS)
+        let json = #"{"key":"3642936.2026-10-02.eveningBefore","day":"2026-10-02","phase":"eveningBefore","isTest":false}"#
+        let attributes = try JSONDecoder().decode(BinDayActivityAttributes.self, from: Data(json.utf8))
+        #expect(attributes.day == day("2026-10-02"))
+        #endif
+        let state = #"{"items":[{"label":"Food Waste","type":"food"},{"label":"Bulky","type":"bulky"}]}"#
+        struct ContentState: Decodable { let items: [BinDayItem] }
+        let decoded = try JSONDecoder().decode(ContentState.self, from: Data(state.utf8))
+        #expect(decoded.items.map(\.type) == [.food, .other])
     }
 }

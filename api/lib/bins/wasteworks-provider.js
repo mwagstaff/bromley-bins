@@ -1,20 +1,18 @@
 import { ParserError, UpstreamError } from '../errors.js';
 import { silentLogger } from '../logger.js';
 import { isNumericId } from '../validation.js';
-import { parseAddressResults } from './address-parser.js';
 import { parseCalendar } from './calendar-parser.js';
-
-const PROPERTY_PATH = /^\/waste\/([0-9]+)\/?$/;
 
 /**
  * Adapter for SocietyWorks' WasteWorks (FixMyStreet) bin collection sites.
- * Everything specific to WasteWorks' URLs, HTML and calendars stays in here;
- * callers only see addresses, property IDs and collections.
+ * Everything specific to WasteWorks' URLs and calendars stays in here; callers
+ * only see property IDs and collections.
+ *
+ * Postcode and address lookup deliberately happen on the phone, so this
+ * service never receives a postcode or address.
  *
  * Implements the BinCollectionProvider shape:
- *   lookupAddresses(postcode) → [{ propertyId, address }]
  *   getCollections(propertyId) → [{ date, type, label, normalizedType }]
- *   resolveUPRN(uprn) → propertyId | null
  */
 export class WasteWorksProvider {
     constructor({
@@ -36,18 +34,6 @@ export class WasteWorksProvider {
         this.metrics = metrics;
     }
 
-    /** `postcode` must already be normalised. */
-    async lookupAddresses(postcode) {
-        return this.#request('lookup_addresses', '/waste', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                Accept: 'text/html'
-            },
-            body: new URLSearchParams({ postcode }).toString()
-        }, async (response) => parseAddressResults(await response.text()));
-    }
-
     async getCollections(propertyId) {
         if (!isNumericId(propertyId)) throw new TypeError('propertyId must be numeric');
         return this.#request('get_collections', `/waste/${propertyId}/calendar.ics`, {
@@ -55,23 +41,7 @@ export class WasteWorksProvider {
         }, async (response) => parseCalendar(await response.text()));
     }
 
-    async resolveUPRN(uprn) {
-        if (!isNumericId(uprn)) throw new TypeError('uprn must be numeric');
-        return this.#request('resolve_uprn', `/property/${uprn}`, {
-            headers: { Accept: 'text/html' },
-            redirect: 'manual'
-        }, async (response) => {
-            await response.body?.cancel();
-            if (response.status < 300 || response.status >= 400) return null;
-            const location = response.headers.get('location');
-            if (!location) throw new ParserError('REDIRECT_WITHOUT_LOCATION');
-            const match = new URL(location, this.baseUrl).pathname.match(PROPERTY_PATH);
-            if (!match) throw new ParserError('UNEXPECTED_REDIRECT', 'UPRN redirect was not to a property page');
-            return match[1];
-        }, { acceptStatus: (status) => (status >= 200 && status < 400) || status === 404 });
-    }
-
-    async #request(operation, path, init, handle, { acceptStatus } = {}) {
+    async #request(operation, path, init, handle) {
         const startedAt = performance.now();
         let httpStatus;
         let outcome = 'ok';
@@ -93,14 +63,9 @@ export class WasteWorksProvider {
             }
 
             httpStatus = response.status;
-            const accepted = acceptStatus ? acceptStatus(response.status) : response.ok;
-            if (!accepted) {
+            if (!response.ok) {
                 await response.body?.cancel();
                 throw new UpstreamError('HTTP_STATUS', { httpStatus: response.status });
-            }
-            if (response.status === 404) {
-                await response.body?.cancel();
-                return null;
             }
             return await handle(response);
         } catch (error) {

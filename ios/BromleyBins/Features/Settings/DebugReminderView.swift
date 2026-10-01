@@ -26,6 +26,7 @@ struct DebugReminderView: View {
     @State private var phase: BinDayPhase = .eveningBefore
     @State private var delay: Delay = .fiveSeconds
     @State private var status: String?
+    @State private var viaServer = true
     @State private var pendingReminders: [UNNotificationRequest] = []
     @State private var activities: [(key: String, state: String, isTest: Bool)] = []
 
@@ -76,21 +77,17 @@ struct DebugReminderView: View {
                     ForEach(Delay.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                Toggle("Send via server push", isOn: $viaServer)
             } header: {
                 Text("Timing")
             } footer: {
-                Text("With a delay, lock the device after tapping to see the reminder arrive on the Lock Screen.")
+                Text("With a delay, lock the device after tapping to see the reminder arrive on the Lock Screen. Via server uses the real APNs path (sandbox), so you can also force-quit the app while you wait.")
             }
 
             Section {
-                Button("Send reminder notification") { Task { await sendNotification() } }
-                Button("Start Live Activity") { startActivity() }
-                Button("Send both") {
-                    Task {
-                        await sendNotification()
-                        startActivity()
-                    }
-                }
+                Button("Send reminder notification") { Task { await send(.notification) } }
+                Button("Start Live Activity") { Task { await send(.activity) } }
+                Button("Send both") { Task { await send(.both) } }
                 Button("End test Live Activities", role: .destructive) { Task { await endTestActivities() } }
             } footer: {
                 if let status {
@@ -99,10 +96,16 @@ struct DebugReminderView: View {
             }
             .disabled(chosenItems.isEmpty)
 
+            Section("Server") {
+                LabeledContent("Installation", value: String(model.installationId.uuidString.prefix(8)) + "…")
+                LabeledContent("Server sends notifications", value: model.serverSendsNotifications ? "Yes" : "No")
+                LabeledContent("Server starts Live Activities", value: model.serverStartsLiveActivities ? "Yes" : "No")
+            }
+
             Section {
                 Button("Re-sync real reminders now") {
                     Task {
-                        await LiveActivityScheduler.shared.reconcile(with: model.state)
+                        await model.resyncReminders()
                         await reloadScheduled()
                     }
                 }
@@ -137,13 +140,22 @@ struct DebugReminderView: View {
         }
     }
 
-    private func sendNotification() async {
-        status = await DebugReminderTester.sendNotification(items: chosenItems, delay: TimeInterval(delay.rawValue))
-    }
-
-    private func startActivity() {
-        status = DebugReminderTester.startActivity(items: chosenItems, phase: phase, delay: TimeInterval(delay.rawValue))
-        Task { await reloadScheduled() }
+    private func send(_ kind: TestReminderRequest.Send) async {
+        if viaServer {
+            status = await DebugReminderTester.sendViaServer(
+                model: model, items: chosenItems, phase: phase, delaySeconds: delay.rawValue, send: kind
+            )
+        } else {
+            var messages: [String] = []
+            if kind != .activity {
+                messages.append(await DebugReminderTester.sendNotification(items: chosenItems, delay: TimeInterval(delay.rawValue)))
+            }
+            if kind != .notification {
+                messages.append(DebugReminderTester.startActivity(items: chosenItems, phase: phase, delay: TimeInterval(delay.rawValue)))
+            }
+            status = messages.joined(separator: " ")
+        }
+        await reloadScheduled()
     }
 
     private func endTestActivities() async {
@@ -166,10 +178,11 @@ struct DebugReminderView: View {
 ///
 /// `bins` takes normalised types (food, recycling, paper, refuse, garden,
 /// other); `phase` is `evening` or `day`; `send` is `both` (default),
-/// `notification` or `activity`. `bromleybins://debug/end` ends test activities.
+/// `notification` or `activity`; `via=server` sends a real push through the
+/// server instead. `bromleybins://debug/end` ends test activities.
 @MainActor
 enum DebugReminderTester {
-    static func handle(_ url: URL) async {
+    static func handle(_ url: URL, model: AppModel) async {
         guard url.scheme == "bromleybins", url.host() == "debug" else { return }
         let query = Dictionary(
             (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") },
@@ -184,10 +197,37 @@ enum DebugReminderTester {
             let delay = TimeInterval(query["delay"].flatMap(Int.init) ?? 5)
             let phase: BinDayPhase = query["phase"] == "day" ? .collectionDay : .eveningBefore
             let send = query["send"] ?? "both"
+            if query["via"] == "server" {
+                _ = await sendViaServer(
+                    model: model, items: items, phase: phase, delaySeconds: Int(delay),
+                    send: TestReminderRequest.Send(rawValue: send) ?? .both
+                )
+                return
+            }
             if send != "activity" { _ = await sendNotification(items: items, delay: delay) }
             if send != "notification" { _ = startActivity(items: items, phase: phase, delay: delay) }
         default:
             break
+        }
+    }
+
+    /// Asks the server to push the reminder, exactly as a real one is sent.
+    static func sendViaServer(
+        model: AppModel,
+        items: [BinDayItem],
+        phase: BinDayPhase,
+        delaySeconds: Int,
+        send: TestReminderRequest.Send
+    ) async -> String {
+        await model.resyncReminders()
+        do {
+            try await model.api.sendTestReminder(
+                TestReminderRequest(items: items, phase: phase, delaySeconds: min(delaySeconds, 600), send: send),
+                installationId: model.installationId
+            )
+            return delaySeconds > 0 ? "Server will push in \(delaySeconds) s." : "Server push sent."
+        } catch {
+            return "Server push failed: \(error.userMessage) (\(error))"
         }
     }
 

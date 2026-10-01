@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct BromleyBinsApp: App {
+    @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -15,12 +16,13 @@ struct BromleyBinsApp: App {
             RootView()
                 .environment(model)
                 .tint(.binsBrand)
+                .task { model.startPush() }
                 .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                     model.dayDidChange()
                 }
                 #if DEBUG
                 .onOpenURL { url in
-                    Task { await DebugReminderTester.handle(url) }
+                    Task { await DebugReminderTester.handle(url, model: model) }
                 }
                 #endif
         }

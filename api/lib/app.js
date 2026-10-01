@@ -2,16 +2,20 @@ import express from 'express';
 import { ApiError } from './errors.js';
 import { silentLogger } from './logger.js';
 import { rateLimit } from './rate-limit.js';
+import { deviceRoutes } from './reminders/device-routes.js';
 
 /**
- * Builds the HTTP app around a BinsService. Routes return normalised JSON only;
- * no upstream HTML, calendar text or URLs ever reach a client.
+ * Builds the HTTP app around a BinsService and the reminder device store.
+ * Routes return normalised JSON only; no upstream HTML, calendar text or URLs
+ * ever reach a client.
  */
 export function createApp({
     service,
+    store = null,
+    scheduler = null,
     logger = silentLogger,
     metrics = null,
-    rateLimitConfig = { windowMs: 60_000, addresses: 20, collections: 60 },
+    rateLimitConfig = { windowMs: 60_000, collections: 60, registrations: 20, tests: 10 },
     trustProxy = 'loopback',
     clock = Date.now
 }) {
@@ -29,38 +33,30 @@ export function createApp({
         next();
     });
 
-    const bins = express.Router();
-    const route = (path, limit, handler) => {
-        const label = `/api/bins${path}`;
-        bins.get(
+    const route = (prefix) => (router, method, path, limitKey, handler) => {
+        const label = `${prefix}${path}`;
+        router[method](
             path,
             (req, res, next) => {
-                res.locals.route = label;
+                res.locals.route = `${method.toUpperCase()} ${label}`;
                 next();
             },
-            rateLimit({ windowMs: rateLimitConfig.windowMs, max: limit, route: label, clock, metrics }),
+            rateLimit({ windowMs: rateLimitConfig.windowMs, max: rateLimitConfig[limitKey], route: label, clock, metrics }),
             handler
         );
     };
 
-    route('/addresses', rateLimitConfig.addresses, async (req, res) => {
-        const result = await service.lookupAddresses(req.query.postcode);
-        res.set('Cache-Control', 'private, max-age=3600');
-        res.json(result);
-    });
-
-    route('/uprn/:uprn', rateLimitConfig.addresses, async (req, res) => {
-        res.set('Cache-Control', 'private, max-age=86400');
-        res.json(await service.resolveUPRN(req.params.uprn));
-    });
-
-    route('/:propertyId/collections', rateLimitConfig.collections, async (req, res) => {
+    const bins = express.Router();
+    route('/api/bins')(bins, 'get', '/:propertyId/collections', 'collections', async (req, res) => {
         const result = await service.getCollections(req.params.propertyId);
         res.set('Cache-Control', result.stale ? 'no-cache' : 'private, max-age=900');
         res.json(result);
     });
 
     app.use('/api/bins', bins);
+    if (store) {
+        app.use('/api/devices', deviceRoutes({ store, scheduler, service, route: route('/api/devices') }));
+    }
 
     app.get('/healthcheck', (req, res) => {
         res.locals.route = '/healthcheck';
@@ -91,6 +87,10 @@ export function createApp({
                 });
             }
             res.status(error.status).json({ error: { code: error.code, message: publicMessage(error) } });
+            return;
+        }
+        if (error.type === 'entity.parse.failed' || error.type === 'entity.too.large') {
+            res.status(400).json({ error: { code: 'INVALID_BODY', message: 'Request body must be JSON under 16 KB' } });
             return;
         }
         logger.error('unhandled_error', { route: res.locals.route, error });

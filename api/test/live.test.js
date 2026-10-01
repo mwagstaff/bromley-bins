@@ -21,9 +21,3 @@ test('live: property 3642936 calendar parses', { skip: !live && 'set LIVE_TESTS=
         assert.ok(normalizedType);
     }
 });
-
-test('live: a Bromley postcode returns numeric property IDs', { skip: !live && 'set LIVE_TESTS=1' }, async () => {
-    const addresses = await provider.lookupAddresses('BR1 1AA');
-    assert.ok(addresses.length > 0);
-    assert.ok(addresses.every(({ propertyId }) => /^[0-9]+$/.test(propertyId)));
-});

@@ -1,26 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BinsService, CACHE_DEFAULTS } from '../lib/bins/bins-service.js';
-import { ParserError, UpstreamError } from '../lib/errors.js';
+import { UpstreamError } from '../lib/errors.js';
 import { manualClock } from './helpers.js';
 
 const HOUR = 60 * 60 * 1_000;
 const FOOD = { date: '2026-10-02', type: 'Food Waste collection', label: 'Food Waste', normalizedType: 'food' };
 
 function fakeProvider(overrides = {}) {
-    const calls = { lookupAddresses: 0, getCollections: 0, resolveUPRN: 0 };
+    const calls = { getCollections: 0 };
     const provider = {
-        async lookupAddresses() {
-            calls.lookupAddresses += 1;
-            return [{ propertyId: '1', address: '1 Example Road' }];
-        },
         async getCollections() {
             calls.getCollections += 1;
             return [FOOD];
-        },
-        async resolveUPRN() {
-            calls.resolveUPRN += 1;
-            return '6360193';
         },
         ...overrides
     };
@@ -35,38 +27,6 @@ function fakeProvider(overrides = {}) {
     }
     return { provider, calls };
 }
-
-test('validates the postcode before calling upstream', async () => {
-    const { provider, calls } = fakeProvider();
-    const service = new BinsService({ provider });
-    await assert.rejects(service.lookupAddresses('nonsense'), { code: 'INVALID_POSTCODE', status: 400 });
-    assert.equal(calls.lookupAddresses, 0);
-});
-
-test('caches addresses per normalised postcode for about a week', async () => {
-    const clock = manualClock();
-    const { provider, calls } = fakeProvider();
-    const service = new BinsService({ provider, clock });
-
-    const result = await service.lookupAddresses('br11aa');
-    assert.equal(result.postcode, 'BR1 1AA');
-    await service.lookupAddresses('BR1  1AA');
-    assert.equal(calls.lookupAddresses, 1);
-
-    clock.advance(CACHE_DEFAULTS.addressTtlMs);
-    await service.lookupAddresses('BR1 1AA');
-    assert.equal(calls.lookupAddresses, 2);
-});
-
-test('an empty postcode is NO_ADDRESSES_FOUND, a broken page is UPSTREAM_ERROR', async () => {
-    const empty = new BinsService({ provider: fakeProvider({ lookupAddresses: async () => [] }).provider });
-    await assert.rejects(empty.lookupAddresses('SW1A 1AA'), { code: 'NO_ADDRESSES_FOUND', status: 404 });
-
-    const broken = new BinsService({
-        provider: fakeProvider({ lookupAddresses: async () => { throw new ParserError('ADDRESS_SELECT_MISSING'); } }).provider
-    });
-    await assert.rejects(broken.lookupAddresses('BR1 1AA'), { code: 'UPSTREAM_ERROR', status: 502 });
-});
 
 test('returns collections with lastUpdated and stale=false', async () => {
     const clock = manualClock();
@@ -134,16 +94,4 @@ test('an empty calendar for a known property does not wipe its schedule', async 
     const result = await service.getCollections('1');
     assert.equal(result.stale, true);
     assert.deepEqual(result.collections, [FOOD]);
-});
-
-test('resolves and caches UPRNs', async () => {
-    const { provider, calls } = fakeProvider();
-    const service = new BinsService({ provider });
-    assert.deepEqual(await service.resolveUPRN('100020437397'), { uprn: '100020437397', propertyId: '6360193' });
-    await service.resolveUPRN('100020437397');
-    assert.equal(calls.resolveUPRN, 1);
-
-    const missing = new BinsService({ provider: fakeProvider({ resolveUPRN: async () => null }).provider });
-    await assert.rejects(missing.resolveUPRN('1'), { code: 'PROPERTY_NOT_FOUND', status: 404 });
-    await assert.rejects(missing.resolveUPRN('x'), { code: 'INVALID_UPRN', status: 400 });
 });

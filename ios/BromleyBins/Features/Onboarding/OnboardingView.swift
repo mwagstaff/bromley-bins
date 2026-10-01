@@ -97,22 +97,11 @@ struct OnboardingView: View {
         Task {
             defer { isSearching = false }
             do throws(BinsAPIError) {
-                results = try await model.api.addresses(postcode: query)
+                results = try await model.addressLookup.addresses(postcode: query)
             } catch {
                 self.error = error
             }
         }
-    }
-}
-
-extension AddressesResponse: @retroactive Hashable {
-    public static func == (lhs: AddressesResponse, rhs: AddressesResponse) -> Bool {
-        lhs.postcode == rhs.postcode && lhs.addresses == rhs.addresses
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(postcode)
-        hasher.combine(addresses)
     }
 }
 

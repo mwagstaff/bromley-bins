@@ -137,7 +137,7 @@ struct SettingsView: View {
         } header: {
             Text("About")
         } footer: {
-            Text("Collection dates come from Bromley Council. Bromley Bins is an independent app and is not affiliated with Bromley Council. Your address is only stored on this device.")
+            Text("Collection dates come from Bromley Council. Bromley Bins is an independent app and is not affiliated with Bromley Council.\n\nYour postcode and address are looked up directly with Bromley Council and stay on this device. To send reminders on time, our server keeps only your council property reference, your reminder settings and a notification token.")
         }
     }
 }

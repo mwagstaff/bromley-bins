@@ -27,7 +27,9 @@ final class LiveActivityScheduler {
     /// brought straight back the next time the app runs.
     private let requestedKeysDefaultsKey = "liveActivity.requestedKeys"
 
-    func reconcile(with state: BinsState, now: Date = .now) async {
+    /// `allowRequests` is false when the server starts activities by push; the
+    /// app then only updates or ends what's out of date, never adds its own.
+    func reconcile(with state: BinsState, now: Date = .now, allowRequests: Bool = true) async {
         let planned = BinDayActivityPlanner.plan(for: state, now: now)
         let plannedByKey = Dictionary(uniqueKeysWithValues: planned.map { ($0.key, $0) })
         var requested = requestedKeys(pruningBefore: CollectionDay(containing: now))
@@ -53,7 +55,8 @@ final class LiveActivityScheduler {
             .filter { $0.activityState == .active || $0.activityState == .pending }
             .map(\.attributes.key))
 
-        guard ActivityAuthorizationInfo().areActivitiesEnabled,
+        guard allowRequests,
+              ActivityAuthorizationInfo().areActivitiesEnabled,
               UIApplication.shared.applicationState == .active
         else {
             saveRequestedKeys(requested)

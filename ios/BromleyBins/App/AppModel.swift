@@ -18,23 +18,40 @@ final class AppModel {
     private(set) var today = CollectionDay(containing: .now)
 
     let api: any BinsAPI
+    /// Postcode lookups go straight to the council, never to our server.
+    let addressLookup: any AddressLookup
     private let store: BinsStore
     private let reminders: ReminderScheduler
     private let liveActivities = LiveActivityScheduler.shared
+    private let push = PushRegistrar.shared
     private let logger = Logger(subsystem: "dev.skynolimit.bromleybins", category: "model")
 
     /// Refreshing more often than this on foregrounding adds nothing: the API
     /// caches the council's calendar for hours.
     private static let foregroundRefreshInterval: TimeInterval = 30 * 60
 
-    init(api: any BinsAPI = BinsAPIClient(baseURL: AppModel.apiBaseURL), store: BinsStore = .shared(), reminders: ReminderScheduler = ReminderScheduler()) {
+    init(
+        api: any BinsAPI = BinsAPIClient(baseURL: AppModel.apiBaseURL),
+        addressLookup: any AddressLookup = CouncilAddressLookup(),
+        store: BinsStore = .shared(),
+        reminders: ReminderScheduler = ReminderScheduler()
+    ) {
         self.api = api
+        self.addressLookup = addressLookup
         self.store = store
         self.reminders = reminders
         self.state = store.load()
     }
 
     var hasProperty: Bool { state.property != nil }
+
+    /// Registers for pushes; re-syncs with the server whenever a token arrives.
+    func startPush() {
+        push.onTokensChanged = { [weak self] in
+            Task { await self?.syncReminders() }
+        }
+        push.start()
+    }
 
     /// Debug builds can point at a local API with the BINS_API_BASE_URL
     /// environment variable; release builds always use production.
@@ -51,9 +68,9 @@ final class AppModel {
 
     func refreshIfDue() async {
         today = CollectionDay(containing: .now)
-        // Live Activities can only be scheduled while the app runs, so catch
-        // up on every foregrounding, not just when a refresh is due.
-        await liveActivities.reconcile(with: state)
+        // Catch up on every foregrounding: re-confirm the server registration
+        // and, where the server isn't handling them, local reminders.
+        await syncReminders()
         let lastRefresh = state.lastSuccessfulRefresh ?? .distantPast
         guard Date.now.timeIntervalSince(lastRefresh) > Self.foregroundRefreshInterval else { return }
         await refresh()
@@ -75,7 +92,7 @@ final class AppModel {
             logger.notice("Refresh failed: \(String(describing: error), privacy: .public)")
             refreshError = error
         }
-        await liveActivities.reconcile(with: state)
+        await liveActivities.reconcile(with: state, allowRequests: !push.serverStartsLiveActivities)
     }
 
     func dayDidChange() {
@@ -150,9 +167,22 @@ final class AppModel {
         } catch {
             logger.error("Save failed: \(error.localizedDescription, privacy: .public)")
         }
-        await reminders.reschedule(for: next)
-        await liveActivities.reconcile(with: next)
+        await syncReminders()
         WidgetCenter.shared.reloadAllTimelines()
         BackgroundRefresh.schedule()
     }
+
+    /// Tells the server, then schedules locally only what it isn't sending.
+    private func syncReminders() async {
+        await push.sync(with: state, api: api)
+        await reminders.reschedule(for: state, serverSends: push.serverSendsNotifications)
+        await liveActivities.reconcile(with: state, allowRequests: !push.serverStartsLiveActivities)
+    }
+
+    #if DEBUG
+    func resyncReminders() async { await syncReminders() }
+    var installationId: UUID { push.installationId }
+    var serverSendsNotifications: Bool { push.serverSendsNotifications }
+    var serverStartsLiveActivities: Bool { push.serverStartsLiveActivities }
+    #endif
 }
