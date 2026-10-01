@@ -64,18 +64,28 @@ test('the evening before: a notification and a Live Activity, until midnight', (
     assert.deepEqual(due[0].items, [{ label: 'Food Waste', type: 'food' }, { label: 'Mixed Recycling', type: 'recycling' }]);
     assert.equal(due[1].activityKey, '3642936.2026-10-02.eveningBefore');
     assert.equal(new Date(due[0].expiresAtMs).toISOString(), '2026-10-01T23:00:00.000Z');
-    assert.equal(new Date(due[1].staleAtMs).toISOString(), '2026-10-02T23:00:00.000Z');
+    // The evening card goes stale at midnight, when the app shows it as "Bin day today".
+    assert.equal(new Date(due[1].staleAtMs).toISOString(), '2026-10-01T23:00:00.000Z');
 
     // Still due late in the evening (e.g. after downtime), not after midnight.
     assert.equal(planDueReminders({ device: device(), collections: SCHEDULE, nowMs: at('2026-10-01T22:59:00Z') }).length, 2);
     assert.equal(planDueReminders({ device: device(), collections: SCHEDULE, nowMs: at('2026-10-01T23:01:00Z') }).length, 0);
 });
 
-test('collection day: a fresh Live Activity from 07:00 until 18:00', () => {
+test('collection day: a fresh Live Activity 12 hours after the evening one, until 18:00', () => {
     assert.deepEqual(planDueReminders({ device: device(), collections: SCHEDULE, nowMs: at('2026-10-02T05:59:00Z') }), []);
     const due = planDueReminders({ device: device(), collections: SCHEDULE, nowMs: at('2026-10-02T06:00:00Z') });
     assert.deepEqual(due.map((r) => [r.kind, r.phase]), [['activity', 'collectionDay']]);
+    assert.equal(new Date(due[0].staleAtMs).toISOString(), '2026-10-02T23:00:00.000Z');
     assert.deepEqual(planDueReminders({ device: device(), collections: SCHEDULE, nowMs: at('2026-10-02T17:00:00Z') }), []);
+
+    // A 21:00 reminder hands over at 09:00; a 10:00 one at midnight, never the evening before.
+    const late = device({ reminders: { enabled: true, hour: 21, minute: 0, showsLiveActivity: true } });
+    assert.deepEqual(planDueReminders({ device: late, collections: SCHEDULE, nowMs: at('2026-10-02T07:59:00Z') }), []);
+    assert.equal(planDueReminders({ device: late, collections: SCHEDULE, nowMs: at('2026-10-02T08:00:00Z') }).length, 1);
+    const early = device({ reminders: { enabled: true, hour: 10, minute: 0, showsLiveActivity: true } });
+    const atMidnight = planDueReminders({ device: early, collections: SCHEDULE, nowMs: at('2026-10-01T23:00:00Z') });
+    assert.deepEqual(atMidnight.map((r) => r.phase), ['collectionDay']);
 });
 
 test('already-sent reminders, hidden bins and settings are respected', () => {
@@ -133,7 +143,7 @@ test('notification and Live Activity payloads', async () => {
     assert.deepEqual(aps.attributes, { key: '3642936.2026-10-02.eveningBefore', day: '2026-10-02', phase: 'eveningBefore', isTest: false });
     assert.deepEqual(aps['content-state'], { items: notification.items });
     assert.equal(aps.timestamp, at('2026-10-01T18:00:00Z') / 1_000);
-    assert.equal(aps['stale-date'], at('2026-10-02T23:00:00Z') / 1_000);
+    assert.equal(aps['stale-date'], at('2026-10-01T23:00:00Z') / 1_000);
     assert.equal(aps.alert.sound, 'silence.caf');
 });
 
@@ -216,4 +226,14 @@ test('test reminders use test keys and only the requested kinds', async () => {
     assert.equal(sends[0].kind, 'activity');
     assert.equal(sends[0].day, '2026-10-01');
     assert.match(sends[0].activityKey, /^debug\./);
+    assert.equal(new Date(sends[0].staleAtMs).toISOString(), '2026-10-01T23:00:00.000Z');
+
+    await scheduler.sendTest(device(), {
+        items: [{ label: 'Food Waste', type: 'food' }],
+        phase: 'eveningBefore',
+        delaySeconds: 0,
+        send: 'activity',
+        staleAfterSeconds: 60
+    });
+    assert.equal(sends[1].staleAtMs, at('2026-10-01T18:01:30Z'));
 });

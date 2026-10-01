@@ -5,15 +5,38 @@ import Foundation
 /// iOS keeps a Live Activity active for at most about eight hours (then up to
 /// four more on the Lock Screen), so one activity can't last from the evening
 /// before until bin day ends. The window is covered by two in relay: one from
-/// the reminder time, and a fresh one on the morning of collection.
+/// the reminder time, and a fresh one once the first has been removed.
+///
+/// The evening card goes stale at midnight, and its view then reads as a
+/// bin-day card, so it's right overnight without needing an update.
 public enum BinDayPhase: String, Codable, Hashable, Sendable, CaseIterable {
     case eveningBefore
     case collectionDay
 
     public var headline: String {
+        headline(isStale: false)
+    }
+
+    /// What the card says, given whether its stale date has passed.
+    public func headline(isStale: Bool) -> String {
+        switch (self, isStale) {
+        case (.eveningBefore, false): "Bins out tonight"
+        case (.eveningBefore, true), (.collectionDay, false): "Bin day today"
+        case (.collectionDay, true): "Collection day has passed"
+        }
+    }
+
+    /// Whether the bins are still worth listing once stale.
+    public func showsItems(isStale: Bool) -> Bool {
+        self == .eveningBefore || !isStale
+    }
+
+    /// When a card for a collection on `day` becomes stale: the evening card
+    /// at the start of collection day, the bin-day card when it ends.
+    public func staleDate(for day: CollectionDay) -> Date {
         switch self {
-        case .eveningBefore: "Bins out tonight"
-        case .collectionDay: "Bin day today"
+        case .eveningBefore: day.startDate
+        case .collectionDay: day.adding(days: 1).startDate
         }
     }
 }
@@ -43,8 +66,16 @@ public struct PlannedBinDayActivity: Hashable, Sendable {
 }
 
 public enum BinDayActivityPlanner {
-    /// Wall-clock time the collection-day activity takes over.
-    public static let morningHour = 7
+    /// iOS removes a Live Activity at most this long after it starts (eight
+    /// hours active plus four on the Lock Screen). The bin-day card starts then,
+    /// so the two never show at once: 07:00 for the default 19:00 reminder.
+    public static let maximumLifetime: TimeInterval = 12 * 60 * 60
+
+    /// When the bin-day card takes over from the evening card started at
+    /// `eveningStart`: twelve hours later, but never before collection day.
+    public static func collectionDayStart(eveningStart: Date, day: CollectionDay) -> Date {
+        max(eveningStart.addingTimeInterval(maximumLifetime), day.startDate)
+    }
 
     /// The activities for the next visible collection day whose window has not
     /// yet finished. Only the next day is planned: iOS limits pending
@@ -58,7 +89,7 @@ public enum BinDayActivityPlanner {
         guard let group = state.upcomingGroups(from: today).first else { return [] }
 
         let eveningStart = group.day.adding(days: -1).date(hour: state.reminders.hour, minute: state.reminders.minute)
-        let morningStart = group.day.date(hour: morningHour, minute: 0)
+        let morningStart = collectionDayStart(eveningStart: eveningStart, day: group.day)
         let dayEnd = group.day.adding(days: 1).startDate
         guard now < dayEnd else { return [] }
 
@@ -70,7 +101,7 @@ public enum BinDayActivityPlanner {
                 phase: phase,
                 items: items,
                 start: start > now ? start : nil,
-                staleDate: dayEnd
+                staleDate: phase.staleDate(for: group.day)
             )
         }
 

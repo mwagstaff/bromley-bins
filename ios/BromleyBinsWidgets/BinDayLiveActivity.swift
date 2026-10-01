@@ -20,7 +20,7 @@ struct BinDayLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 2) {
-                        Text(context.attributes.phase.headline)
+                        Text(context.attributes.phase.headline(isStale: context.isStale))
                             .font(.headline)
                         Text(ScheduleFormatting.long(context.attributes.day))
                             .font(.caption)
@@ -34,7 +34,7 @@ struct BinDayLiveActivity: Widget {
             } compactLeading: {
                 Image(systemName: "trash.fill")
                     .foregroundStyle(Color.binsBrand)
-                    .accessibilityLabel(context.attributes.phase.headline)
+                    .accessibilityLabel(context.attributes.phase.headline(isStale: context.isStale))
             } compactTrailing: {
                 HStack(spacing: 2) {
                     ForEach(items.prefix(3), id: \.self) { item in
@@ -46,7 +46,7 @@ struct BinDayLiveActivity: Widget {
             } minimal: {
                 Image(systemName: "trash.fill")
                     .foregroundStyle(Color.binsBrand)
-                    .accessibilityLabel(context.attributes.phase.headline)
+                    .accessibilityLabel(context.attributes.phase.headline(isStale: context.isStale))
             }
             .keylineTint(Color.binsBrand)
         }
@@ -61,7 +61,7 @@ private struct BinDayLockScreenView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Label(attributes.phase.headline, systemImage: "trash.fill")
+                Label(attributes.phase.headline(isStale: isStale), systemImage: "trash.fill")
                     .font(.headline)
                     .foregroundStyle(Color.binsBrand)
                 Spacer()
@@ -69,11 +69,7 @@ private struct BinDayLockScreenView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            if isStale {
-                Text("Collection day has passed")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
+            if attributes.phase.showsItems(isStale: isStale) {
                 BinItemsList(items: items, badgeSize: 32)
             }
         }

@@ -27,6 +27,7 @@ struct DebugReminderView: View {
     @State private var delay: Delay = .fiveSeconds
     @State private var status: String?
     @State private var viaServer = true
+    @State private var staleSoon = false
     @State private var pendingReminders: [UNNotificationRequest] = []
     @State private var activities: [(key: String, state: String, isTest: Bool)] = []
 
@@ -78,6 +79,7 @@ struct DebugReminderView: View {
                 }
                 .pickerStyle(.segmented)
                 Toggle("Send via server push", isOn: $viaServer)
+                Toggle("Go stale 2 min after starting", isOn: $staleSoon)
             } header: {
                 Text("Timing")
             } footer: {
@@ -143,7 +145,8 @@ struct DebugReminderView: View {
     private func send(_ kind: TestReminderRequest.Send) async {
         if viaServer {
             status = await DebugReminderTester.sendViaServer(
-                model: model, items: chosenItems, phase: phase, delaySeconds: delay.rawValue, send: kind
+                model: model, items: chosenItems, phase: phase, delaySeconds: delay.rawValue, send: kind,
+                staleAfterSeconds: staleSoon ? 120 : nil
             )
         } else {
             var messages: [String] = []
@@ -151,7 +154,10 @@ struct DebugReminderView: View {
                 messages.append(await DebugReminderTester.sendNotification(items: chosenItems, delay: TimeInterval(delay.rawValue)))
             }
             if kind != .notification {
-                messages.append(DebugReminderTester.startActivity(items: chosenItems, phase: phase, delay: TimeInterval(delay.rawValue)))
+                messages.append(DebugReminderTester.startActivity(
+                    items: chosenItems, phase: phase, delay: TimeInterval(delay.rawValue),
+                    staleAfter: staleSoon ? 120 : nil
+                ))
             }
             status = messages.joined(separator: " ")
         }
@@ -179,7 +185,8 @@ struct DebugReminderView: View {
 /// `bins` takes normalised types (food, recycling, paper, refuse, garden,
 /// other); `phase` is `evening` or `day`; `send` is `both` (default),
 /// `notification` or `activity`; `via=server` sends a real push through the
-/// server instead. `bromleybins://debug/end` ends test activities.
+/// server instead; `stale=120` makes the card go stale 120 s after it starts
+/// (iOS doesn't go below about two minutes). `bromleybins://debug/end` ends test activities.
 @MainActor
 enum DebugReminderTester {
     static func handle(_ url: URL, model: AppModel) async {
@@ -197,15 +204,18 @@ enum DebugReminderTester {
             let delay = TimeInterval(query["delay"].flatMap(Int.init) ?? 5)
             let phase: BinDayPhase = query["phase"] == "day" ? .collectionDay : .eveningBefore
             let send = query["send"] ?? "both"
+            let stale = query["stale"].flatMap(Int.init)
             if query["via"] == "server" {
                 _ = await sendViaServer(
                     model: model, items: items, phase: phase, delaySeconds: Int(delay),
-                    send: TestReminderRequest.Send(rawValue: send) ?? .both
+                    send: TestReminderRequest.Send(rawValue: send) ?? .both, staleAfterSeconds: stale
                 )
                 return
             }
             if send != "activity" { _ = await sendNotification(items: items, delay: delay) }
-            if send != "notification" { _ = startActivity(items: items, phase: phase, delay: delay) }
+            if send != "notification" {
+                _ = startActivity(items: items, phase: phase, delay: delay, staleAfter: stale.map(TimeInterval.init))
+            }
         default:
             break
         }
@@ -217,12 +227,16 @@ enum DebugReminderTester {
         items: [BinDayItem],
         phase: BinDayPhase,
         delaySeconds: Int,
-        send: TestReminderRequest.Send
+        send: TestReminderRequest.Send,
+        staleAfterSeconds: Int? = nil
     ) async -> String {
         await model.resyncReminders()
         do {
             try await model.api.sendTestReminder(
-                TestReminderRequest(items: items, phase: phase, delaySeconds: min(delaySeconds, 600), send: send),
+                TestReminderRequest(
+                    items: items, phase: phase, delaySeconds: min(delaySeconds, 600), send: send,
+                    staleAfterSeconds: staleAfterSeconds
+                ),
                 installationId: model.installationId
             )
             return delaySeconds > 0 ? "Server will push in \(delaySeconds) s." : "Server push sent."
@@ -251,7 +265,9 @@ enum DebugReminderTester {
         }
     }
 
-    static func startActivity(items: [BinDayItem], phase: BinDayPhase, delay: TimeInterval) -> String {
+    /// `staleAfter` makes the card go stale that long after it starts, to
+    /// preview the midnight switch without waiting for midnight.
+    static func startActivity(items: [BinDayItem], phase: BinDayPhase, delay: TimeInterval, staleAfter: TimeInterval? = nil) -> String {
         let today = CollectionDay(containing: .now)
         let day = phase == .eveningBefore ? today.adding(days: 1) : today
         let attributes = BinDayActivityAttributes(key: "debug.\(UUID().uuidString.prefix(8))", day: day, phase: phase, isTest: true)
@@ -260,7 +276,7 @@ enum DebugReminderTester {
                 attributes: attributes,
                 items: items,
                 start: delay > 0 ? Date.now.addingTimeInterval(delay) : nil,
-                staleDate: day.adding(days: 1).startDate
+                staleDate: staleAfter.map { Date.now.addingTimeInterval(delay + $0) } ?? phase.staleDate(for: day)
             )
             return delay > 0 ? "Live Activity scheduled in \(Int(delay)) s." : "Live Activity started."
         } catch {

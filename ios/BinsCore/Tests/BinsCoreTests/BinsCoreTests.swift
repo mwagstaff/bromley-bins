@@ -222,7 +222,9 @@ private let schedule = [
         #expect(plan.map(\.phase) == [.eveningBefore, .collectionDay])
         #expect(plan[0].start == london("2026-10-01", 19))
         #expect(plan[1].start == london("2026-10-02", 7))
-        #expect(plan.allSatisfy { $0.staleDate == day("2026-10-03").startDate })
+        // Evening card goes stale at midnight (then reads "Bin day today"); bin-day card at day end.
+        #expect(plan[0].staleDate == day("2026-10-02").startDate)
+        #expect(plan[1].staleDate == day("2026-10-03").startDate)
         #expect(plan[0].items.map(\.type) == [.food, .recycling])
         #expect(plan[0].key == "3642936.2026-10-02.eveningBefore")
     }
@@ -353,5 +355,26 @@ private func fixture(_ name: String) throws -> String {
         struct ContentState: Decodable { let items: [BinDayItem] }
         let decoded = try JSONDecoder().decode(ContentState.self, from: Data(state.utf8))
         #expect(decoded.items.map(\.type) == [.food, .other])
+    }
+}
+
+@Suite struct BinDayPhaseTests {
+    @Test func wordingSwitchesWhenStale() {
+        #expect(BinDayPhase.eveningBefore.headline(isStale: false) == "Bins out tonight")
+        #expect(BinDayPhase.eveningBefore.headline(isStale: true) == "Bin day today")
+        #expect(BinDayPhase.collectionDay.headline(isStale: false) == "Bin day today")
+        #expect(BinDayPhase.collectionDay.headline(isStale: true) == "Collection day has passed")
+        #expect(BinDayPhase.eveningBefore.showsItems(isStale: true))
+        #expect(!BinDayPhase.collectionDay.showsItems(isStale: true))
+    }
+
+    @Test func handOverIsTwelveHoursAfterTheEveningCard() {
+        let collection = day("2026-10-02")
+        #expect(BinDayActivityPlanner.collectionDayStart(eveningStart: london("2026-10-01", 19), day: collection) == london("2026-10-02", 7))
+        #expect(BinDayActivityPlanner.collectionDayStart(eveningStart: london("2026-10-01", 21), day: collection) == london("2026-10-02", 9))
+        // Never before collection day starts.
+        #expect(BinDayActivityPlanner.collectionDayStart(eveningStart: london("2026-10-01", 10), day: collection) == collection.startDate)
+        // Elapsed time, so the night the clocks go back is 06:00 by the clock.
+        #expect(BinDayActivityPlanner.collectionDayStart(eveningStart: london("2026-10-24", 19), day: day("2026-10-25")) == london("2026-10-25", 6))
     }
 }

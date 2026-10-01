@@ -58,7 +58,7 @@ latest cached calendar, which pushes are due and haven't been sent:
 | When (London time) | Push |
 |---|---|
 | Reminder time → midnight, the evening before a collection | Alert notification "Bins out tonight" + push-to-start "Bins out tonight" Live Activity |
-| 07:00 → 18:00 on collection day | Push-to-start "Bin day today" Live Activity (the evening one ends after ~8h) |
+| 12 h after the reminder time (07:00 by default, never before midnight) → 18:00 on collection day | Push-to-start "Bin day today" Live Activity |
 
 Windows rather than exact instants mean a send missed during downtime goes out
 when the server is back. Sends are recorded per device so nothing is
@@ -159,10 +159,15 @@ even if the app hasn't run for weeks or was force-quit:
 
 - **"Bins out tonight"**: a notification plus a Lock Screen / Dynamic Island
   Live Activity at the reminder time the evening before.
-- **"Bin day today"**: a fresh Live Activity at 07:00 on collection day.
+- At midnight the evening card goes stale and redraws itself as **"Bin day
+  today"**, with no push needed.
+- **"Bin day today"**: a fresh Live Activity 12 hours after the evening one
+  (07:00 for a 19:00 reminder), by which point iOS has removed the first.
 
-Two activities are needed because iOS keeps a Live Activity active for only
-about 8 hours (then up to ~4 more on the Lock Screen). Either can be swiped
+Two activities are needed because iOS removes a Live Activity at most 12 hours
+after it starts (8 active, then up to 4 on the Lock Screen). Timing the
+hand-over to that limit means the two never show together, which matters
+because the server can't end the evening card itself. Either can be swiped
 away. The activity's own alert uses `silence.caf` so the notification is the
 only sound.
 
@@ -189,7 +194,10 @@ bromleybins://debug/end
 ```
 
 `bins`: food, recycling, paper, refuse, garden, other. `phase`: evening or day.
-`send`: both, notification or activity. Add `via=server` for a real push.
+`send`: both, notification or activity. Add `via=server` for a real push, and
+`stale=120` to watch the midnight "Bins out tonight" → "Bin day today" switch
+without waiting (the "Go stale 2 min after starting" toggle does the same; iOS
+won't go stale sooner than about two minutes).
 Release builds ignore these URLs.
 
 Push needs a real device: the simulator receives `xcrun simctl push` alert

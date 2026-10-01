@@ -71,12 +71,15 @@ public struct TestReminderRequest: Encodable, Sendable {
     public let phase: BinDayPhase
     public let delaySeconds: Int
     public let send: Send
+    /// Debug: make the card go stale this long after it starts.
+    public let staleAfterSeconds: Int?
 
-    public init(items: [BinDayItem], phase: BinDayPhase, delaySeconds: Int, send: Send) {
+    public init(items: [BinDayItem], phase: BinDayPhase, delaySeconds: Int, send: Send, staleAfterSeconds: Int? = nil) {
         self.items = items
         self.phase = phase
         self.delaySeconds = delaySeconds
         self.send = send
+        self.staleAfterSeconds = staleAfterSeconds
     }
 }
 

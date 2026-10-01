@@ -54,7 +54,7 @@ export function parseRegistration(body) {
 }
 
 export function parseTest(body) {
-    const { items, phase, delaySeconds = 0, send = 'both' } = body ?? {};
+    const { items, phase, delaySeconds = 0, send = 'both', staleAfterSeconds = null } = body ?? {};
     if (!Array.isArray(items) || items.length < 1 || items.length > 6
         || !items.every((i) => i && typeof i.label === 'string' && i.label.length > 0 && i.label.length <= 100 && TYPES.has(i.type))) {
         throw invalid('items must be 1–6 bins with a label and type');
@@ -62,7 +62,8 @@ export function parseTest(body) {
     if (!PHASES.has(phase)) throw invalid('phase must be eveningBefore or collectionDay');
     if (!isInt(delaySeconds, 0, 600)) throw invalid('delaySeconds must be 0–600');
     if (!SENDS.has(send)) throw invalid('send must be both, notification or activity');
-    return { items: items.map(({ label, type }) => ({ label, type })), phase, delaySeconds, send };
+    if (staleAfterSeconds !== null && !isInt(staleAfterSeconds, 1, 3600)) throw invalid('staleAfterSeconds must be 1–3600');
+    return { items: items.map(({ label, type }) => ({ label, type })), phase, delaySeconds, send, staleAfterSeconds };
 }
 
 /**

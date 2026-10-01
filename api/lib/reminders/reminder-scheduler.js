@@ -1,6 +1,6 @@
 import { silentLogger } from '../logger.js';
-import { addDays, londonDay, londonInstant } from '../london-time.js';
-import { activityKey, planDueReminders } from './reminder-planner.js';
+import { addDays, londonDay } from '../london-time.js';
+import { activityKey, planDueReminders, staleAtMs } from './reminder-planner.js';
 
 const TOKEN_FIELD = { notification: 'apnsToken', activity: 'liveActivityToken' };
 
@@ -76,7 +76,7 @@ export class ReminderScheduler {
      * Debug builds only (the caller checks for the sandbox environment): sends
      * a reminder now or after a short delay with the given bins.
      */
-    sendTest(device, { items, phase, delaySeconds, send }) {
+    sendTest(device, { items, phase, delaySeconds, send, staleAfterSeconds = null }) {
         const nowMs = this.clock();
         const today = londonDay(nowMs);
         const day = phase === 'eveningBefore' ? addDays(today, 1) : today;
@@ -86,7 +86,9 @@ export class ReminderScheduler {
             items,
             activityKey: `debug.${activityKey(device.propertyId, day, phase)}.${nowMs}`,
             expiresAtMs: nowMs + delaySeconds * 1_000 + 60 * 60 * 1_000,
-            staleAtMs: londonInstant(addDays(day, 1))
+            staleAtMs: staleAfterSeconds === null
+                ? staleAtMs(day, phase)
+                : nowMs + (delaySeconds + staleAfterSeconds) * 1_000
         };
         const kinds = send === 'both' ? ['notification', 'activity'] : [send];
         const fire = async () => {

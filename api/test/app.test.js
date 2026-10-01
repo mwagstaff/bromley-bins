@@ -146,7 +146,7 @@ test('test reminders are for sandbox (debug) registrations only and rate limited
     await call('PUT', `/api/devices/${INSTALLATION}`, registration());
     assert.equal((await call('POST', `/api/devices/${INSTALLATION}/test`, { ...test, delaySeconds: 9999 })).status, 400);
     assert.equal((await call('POST', `/api/devices/${INSTALLATION}/test`, test)).status, 202);
-    assert.deepEqual(testsSent, [{ device: INSTALLATION, test }]);
+    assert.deepEqual(testsSent, [{ device: INSTALLATION, test: { ...test, staleAfterSeconds: null } }]);
     assert.equal((await call('POST', `/api/devices/${INSTALLATION}/test`, test)).status, 429);
     await call('DELETE', `/api/devices/${INSTALLATION}`);
 });
