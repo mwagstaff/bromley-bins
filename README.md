@@ -127,6 +127,27 @@ https://api.skynolimit.dev/bromley-bins
 3. `deploy/tailscale-funnel-apply.sh` and `tailscale/resources/tailscale-funnel-apply.sh`: `apply_route /bromley-bins http://127.0.0.1:3040`.
 4. Deploy with `./deploy/node_project.zsh bromley-bins`, then verify with
    `curl https://api.skynolimit.dev/bromley-bins/api/bins/3642936/collections`.
+5. Allow the Prometheus Docker network to scrape port 3040. On Sky, the
+   `monitoring_default` network uses `172.18.0.0/16` (verify with
+   `docker network inspect monitoring_default` before applying on another host):
+   ```bash
+   sudo ufw allow from 172.18.0.0/16 to any port 3040 proto tcp comment 'Prometheus Docker metrics: bromley-bins'
+   ```
+   Use a persistent UFW rule: a temporary iptables rule disappears on reboot.
+
+### External uptime check
+
+For cron-job.org, use `GET https://api.skynolimit.dev/bromley-bins/healthcheck`
+every five minutes, with failure and recovery notifications enabled. A healthy
+response is HTTP 200 with `{"status":"ok"}`. No authentication is required.
+This lightweight route checks the public Cloudflare/Caddy path and running API;
+it does not verify council data freshness or APNs reminder delivery.
+
+On 10 October 2026, the scheduled 04:00 UK reboot was followed by `TargetDown`
+because UFW blocked Prometheus's Docker network from port 3040. The API
+restarted at 04:00:26; the missing persistent firewall rule was repaired on
+11 October. This alert reports failure to scrape metrics, not proof of a public
+API outage.
 
 ## iOS
 
