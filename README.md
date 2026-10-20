@@ -154,7 +154,7 @@ API outage.
 Xcode 27, iOS 26+, Swift 6 strict concurrency, universal (iPhone + iPad).
 Bundle ID `dev.skynolimit.bromleybins` (same as the live app so this ships as
 an update), widget `dev.skynolimit.bromleybins.widgets`, App Group
-`group.dev.skynolimit.bromleybins`, version 2.0.0.
+`group.dev.skynolimit.bromleybins`, version 2.0.0, build 101.
 
 ```bash
 cd ios/BinsCore && swift test
@@ -198,6 +198,15 @@ registration (offline, push denied, server down), the app falls back to
 scheduling local notifications and on-device scheduled Live Activities, and it
 stands those down for whatever the server confirms, so nothing is duplicated.
 
+On 15 October 2026, a phone still running the earlier local-only build showed
+its evening activity only after the app was opened. The production server had
+push enabled but no registered devices, and the phone had no push installation
+identifier. Installing build 101 registered both tokens; APNs accepted the
+evening notification and activity. Build 101 also cancels pending local
+activities once server registration is confirmed, and counts stale activities
+as existing so reconciliation doesn't request a duplicate. APNs acceptance
+confirms the send, not that iOS displayed the activity.
+
 ### Debug-only reminder testing
 
 Debug builds add **Settings → Debug → Test reminders**: pick any bins, choose
@@ -228,7 +237,7 @@ payloads, but can't route a Live Activity push-to-start (that needs APNs's
 ### Before submitting 2.0
 
 - **Team**: set to `SJ8X4DLAN9` (as TubeTrack). Confirm that's the team that owns the live app.
-- **Build number**: `CURRENT_PROJECT_VERSION = 100`. Must be higher than every build ever uploaded for 1.x — check App Store Connect.
+- **Build number**: `CURRENT_PROJECT_VERSION = 101`. Must be higher than every build ever uploaded for 1.x — check App Store Connect.
 - **App icon**: `ios/BromleyBins/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png` is a generated placeholder; replace with the real icon.
 - **App Group**: register `group.dev.skynolimit.bromleybins` (automatic signing will offer to) for both app and widget.
 - **Deploy the API first**, with APNs configured. Release builds always use the production URL.

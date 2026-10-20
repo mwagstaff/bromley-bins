@@ -35,6 +35,13 @@ final class LiveActivityScheduler {
         var requested = requestedKeys(pruningBefore: CollectionDay(containing: now))
 
         for activity in Activity<BinDayActivityAttributes>.activities where !activity.attributes.isTest {
+            // Once remote starts are confirmed, cancel the local fallback's
+            // future starts. Keep an already visible card until its window ends.
+            if !allowRequests && activity.activityState == .pending {
+                await activity.end(nil, dismissalPolicy: .immediate)
+                requested.remove(activity.attributes.key)
+                continue
+            }
             guard let plan = plannedByKey[activity.attributes.key] else {
                 await activity.end(nil, dismissalPolicy: .immediate)
                 continue
@@ -52,7 +59,7 @@ final class LiveActivityScheduler {
         }
 
         let existingKeys = Set(Activity<BinDayActivityAttributes>.activities
-            .filter { $0.activityState == .active || $0.activityState == .pending }
+            .filter { $0.activityState == .active || $0.activityState == .stale || $0.activityState == .pending }
             .map(\.attributes.key))
 
         guard allowRequests,
